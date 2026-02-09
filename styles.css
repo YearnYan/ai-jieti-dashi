@@ -927,7 +927,7 @@ body {
     border: 1px dashed rgba(0, 212, 255, 0.25);
     border-radius: 8px;
     background: rgba(13, 17, 23, 0.55);
-    min-height: 120px;
+    min-height: 92px;
     padding: 0.75rem;
 }
 
@@ -938,13 +938,37 @@ body {
 .generated-figure-box .svg-wrap {
     width: 100%;
     overflow-x: auto;
+    display: flex;
+    justify-content: center;
 }
 
 .generated-figure-box svg {
-    width: 100%;
-    min-width: 260px;
+    width: min(100%, 360px);
+    min-width: 220px;
+    max-height: 210px;
     height: auto;
     display: block;
+}
+
+.generated-figure-box .ai-figure,
+.generated-figure-box .ai-figure * {
+    color: #ffffff;
+    stroke: #ffffff;
+}
+
+.generated-figure-box .ai-figure text,
+.generated-figure-box .ai-figure tspan {
+    fill: #ffffff;
+}
+
+.generated-figure-box .ai-figure path[fill="none"],
+.generated-figure-box .ai-figure line[fill="none"],
+.generated-figure-box .ai-figure polyline[fill="none"],
+.generated-figure-box .ai-figure polygon[fill="none"],
+.generated-figure-box .ai-figure circle[fill="none"],
+.generated-figure-box .ai-figure ellipse[fill="none"],
+.generated-figure-box .ai-figure rect[fill="none"] {
+    fill: none;
 }
 
 /* Create Section */

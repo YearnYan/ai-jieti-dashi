@@ -214,39 +214,83 @@ function normalizeSvgContent(svg) {
     const match = raw.match(/<svg[\s\S]*<\/svg>/i);
     if (!match) return '';
 
-    return match[0]
+    let safeSvg = match[0]
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
         .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
         .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
-        .replace(/javascript:/gi, '');
+        .replace(/javascript:/gi, '')
+        .replace(/\bhref\s*=\s*"\s*javascript:[^"]*"/gi, '')
+        .replace(/\bhref\s*=\s*'\s*javascript:[^']*'/gi, '');
+
+    safeSvg = safeSvg.replace(
+        /<rect\b(?=[^>]*\bwidth\s*=\s*["'](?:100%|420|400|360|340|320)["'])(?=[^>]*\bheight\s*=\s*["'](?:100%|240|220|200|180|160)["'])(?=[^>]*\bfill\s*=\s*["'](?:#0d1117|#1c2128|#000|#000000|black|rgb\(0,\s*0,\s*0\))["'])[^>]*\/?>/gi,
+        ''
+    );
+
+    safeSvg = safeSvg.replace(/<svg\b([^>]*)>/i, (full, attrs) => {
+        let normalizedAttrs = attrs || '';
+
+        if (!/\bxmlns\s*=/.test(normalizedAttrs)) {
+            normalizedAttrs += ' xmlns="http://www.w3.org/2000/svg"';
+        }
+        if (!/\bpreserveAspectRatio\s*=/.test(normalizedAttrs)) {
+            normalizedAttrs += ' preserveAspectRatio="xMidYMid meet"';
+        }
+
+        if (!/\bviewBox\s*=/.test(normalizedAttrs)) {
+            normalizedAttrs += ' viewBox="0 0 320 180"';
+        }
+
+        if (!/\bclass\s*=/.test(normalizedAttrs)) {
+            normalizedAttrs += ' class="ai-figure"';
+        } else if (!/\bai-figure\b/.test(normalizedAttrs)) {
+            normalizedAttrs = normalizedAttrs.replace(/\bclass\s*=\s*"([^"]*)"/i, (m, className) => `class="${className} ai-figure"`);
+            normalizedAttrs = normalizedAttrs.replace(/\bclass\s*=\s*'([^']*)'/i, (m, className) => `class="${className} ai-figure"`);
+        }
+
+        if (!/\bstyle\s*=/.test(normalizedAttrs)) {
+            normalizedAttrs += ' style="color:#ffffff"';
+        } else if (!/color\s*:/i.test(normalizedAttrs)) {
+            normalizedAttrs = normalizedAttrs.replace(/\bstyle\s*=\s*"([^"]*)"/i, (m, styleValue) => `style="${styleValue};color:#ffffff"`);
+            normalizedAttrs = normalizedAttrs.replace(/\bstyle\s*=\s*'([^']*)'/i, (m, styleValue) => `style='${styleValue};color:#ffffff'`);
+        }
+
+        return `<svg${normalizedAttrs}>`;
+    });
+
+    safeSvg = safeSvg
+        .replace(/\b(stroke|fill|color)\s*=\s*"(?:#000|#000000|#111|#111111|#0d1117|#1c2128|black|rgb\(0\s*,\s*0\s*,\s*0\s*\)|rgb\(13\s*,\s*17\s*,\s*23\s*\)|rgb\(28\s*,\s*33\s*,\s*40\s*\))"/gi, '$1="#ffffff"')
+        .replace(/\b(stroke|fill|color)\s*=\s*'(?:#000|#000000|#111|#111111|#0d1117|#1c2128|black|rgb\(0\s*,\s*0\s*,\s*0\s*\)|rgb\(13\s*,\s*17\s*,\s*23\s*\)|rgb\(28\s*,\s*33\s*,\s*40\s*\))'/gi, '$1="#ffffff"');
+
+    return safeSvg;
 }
 
 function buildFallbackFigureSvg(figureType, summary = '') {
     const safeSummary = escapeHtml(cleanDisplayText(summary || '题目图形'));
-    const common = `viewBox="0 0 420 220" xmlns="http://www.w3.org/2000/svg"`;
+    const common = `viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" class="ai-figure" style="color:#ffffff"`;
 
     if (figureType === 'math') {
-        return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><line x1="40" y1="180" x2="390" y2="180" stroke="#00d4ff" stroke-width="2"/><line x1="80" y1="30" x2="80" y2="200" stroke="#00d4ff" stroke-width="2"/><polyline points="80,160 130,120 180,140 240,80 300,110 360,60" fill="none" stroke="#00ff88" stroke-width="3"/><text x="96" y="48" fill="#e6edf3" font-size="14">y</text><text x="375" y="196" fill="#e6edf3" font-size="14">x</text><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+        return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="28" y1="150" x2="296" y2="150"/><line x1="52" y1="20" x2="52" y2="164"/><polyline points="52,132 110,94 176,114 232,74 286,94"/><polygon points="296,150 289,147 289,153" fill="#ffffff"/><polygon points="52,20 49,28 55,28" fill="#ffffff"/></g><g fill="#ffffff" font-size="10"><text x="289" y="165">x</text><text x="60" y="30">y</text><text x="108" y="90">A</text><text x="176" y="110">B</text><text x="232" y="70">C</text></g></svg>`;
     }
 
     if (figureType === 'physics') {
-        return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><line x1="30" y1="170" x2="390" y2="170" stroke="#8b949e" stroke-width="2"/><rect x="140" y="120" width="100" height="50" rx="6" fill="#1c2128" stroke="#00d4ff"/><line x1="190" y1="120" x2="250" y2="70" stroke="#ff9500" stroke-width="3"/><polygon points="250,70 242,74 246,63" fill="#ff9500"/><line x1="190" y1="145" x2="190" y2="190" stroke="#00ff88" stroke-width="3"/><polygon points="190,190 184,180 196,180" fill="#00ff88"/><text x="255" y="70" fill="#ff9500" font-size="13">F</text><text x="196" y="198" fill="#00ff88" font-size="13">mg</text><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+        return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="24" y1="150" x2="296" y2="150"/><line x1="74" y1="150" x2="204" y2="92"/><line x1="204" y1="92" x2="250" y2="150"/><rect x="150" y="104" width="36" height="24" rx="2"/><line x1="168" y1="104" x2="212" y2="70"/><line x1="168" y1="116" x2="168" y2="152"/><polygon points="212,70 205,71 208,64" fill="#ffffff"/><polygon points="168,152 163,144 173,144" fill="#ffffff"/></g><g fill="#ffffff" font-size="10"><text x="215" y="68">F</text><text x="173" y="161">mg</text><text x="208" y="101">θ</text></g></svg>`;
     }
 
     if (figureType === 'chemistry') {
-        return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><circle cx="130" cy="110" r="20" fill="#00d4ff"/><circle cx="190" cy="110" r="20" fill="#00ff88"/><circle cx="250" cy="110" r="20" fill="#ff00aa"/><line x1="150" y1="110" x2="170" y2="110" stroke="#e6edf3" stroke-width="3"/><line x1="210" y1="110" x2="230" y2="110" stroke="#e6edf3" stroke-width="3"/><rect x="290" y="55" width="80" height="110" rx="8" fill="none" stroke="#8b949e"/><line x1="330" y1="70" x2="330" y2="140" stroke="#00d4ff" stroke-width="4"/><ellipse cx="330" cy="150" rx="24" ry="10" fill="#00d4ff" opacity="0.6"/><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+        return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="86,90 106,78 126,90 126,114 106,126 86,114"/><line x1="126" y1="90" x2="146" y2="78"/><line x1="126" y1="114" x2="146" y2="126"/><line x1="146" y1="78" x2="166" y2="90"/><line x1="146" y1="126" x2="166" y2="114"/><line x1="166" y1="90" x2="166" y2="114"/><rect x="214" y="58" width="54" height="86" rx="4"/><line x1="241" y1="66" x2="241" y2="122"/><ellipse cx="241" cy="128" rx="14" ry="6"/></g><g fill="#ffffff" font-size="10"><text x="72" y="84">C</text><text x="172" y="86">H</text><text x="173" y="123">O</text><text x="253" y="70">滴定</text></g></svg>`;
     }
 
     if (figureType === 'biology') {
-        return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><ellipse cx="170" cy="110" rx="90" ry="55" fill="#1c2128" stroke="#00ff88" stroke-width="2"/><circle cx="170" cy="110" r="28" fill="#00d4ff" opacity="0.7"/><circle cx="170" cy="110" r="10" fill="#ff00aa"/><line x1="260" y1="90" x2="340" y2="60" stroke="#8b949e"/><text x="345" y="62" fill="#e6edf3" font-size="12">细胞膜</text><line x1="195" y1="125" x2="340" y2="140" stroke="#8b949e"/><text x="345" y="143" fill="#e6edf3" font-size="12">细胞核</text><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+        return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="128" cy="92" rx="74" ry="46"/><ellipse cx="128" cy="92" rx="26" ry="18"/><ellipse cx="176" cy="82" rx="12" ry="7"/><ellipse cx="84" cy="112" rx="10" ry="6"/><line x1="208" y1="66" x2="262" y2="42"/><line x1="158" y1="100" x2="262" y2="126"/></g><g fill="#ffffff" font-size="10"><text x="266" y="44">细胞膜</text><text x="266" y="129">细胞核</text></g></svg>`;
     }
 
     if (figureType === 'geography') {
-        return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><rect x="40" y="40" width="340" height="150" fill="#0f1720" stroke="#00d4ff"/><path d="M80 150 C120 90, 180 90, 210 120 S300 165, 350 120" fill="none" stroke="#00ff88" stroke-width="3"/><path d="M110 70 L130 50 L150 70 L140 70 L140 100 L120 100 L120 70 Z" fill="#ff9500"/><line x1="290" y1="70" x2="290" y2="150" stroke="#8b949e" stroke-dasharray="5 4"/><text x="295" y="88" fill="#e6edf3" font-size="12">经线</text><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+        return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="28" y="28" width="264" height="124" rx="2"/><path d="M54 126 C86 92, 118 88, 152 104 S220 140, 266 112"/><path d="M74 64 L92 54 L110 64 L102 64 L102 86 L82 86 L82 64 Z"/><line x1="214" y1="44" x2="214" y2="134" stroke-dasharray="4 4"/><line x1="54" y1="74" x2="278" y2="74" stroke-dasharray="4 4"/></g><g fill="#ffffff" font-size="10"><text x="220" y="56">经线</text><text x="260" y="70">纬线</text></g></svg>`;
     }
 
-    return `<svg ${common}><rect width="420" height="220" fill="#0d1117"/><rect x="40" y="40" width="340" height="140" fill="none" stroke="#8b949e" stroke-dasharray="6 4"/><text x="210" y="115" text-anchor="middle" fill="#8b949e" font-size="14">图形识别中</text><text x="24" y="24" fill="#8b949e" font-size="12">${safeSummary}</text></svg>`;
+    return `<svg ${common}><title>${safeSummary}</title><g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="28" y="34" width="264" height="112" rx="4" stroke-dasharray="6 4"/><line x1="28" y1="34" x2="292" y2="146"/></g><text x="160" y="96" text-anchor="middle" fill="#ffffff" font-size="11">图形待生成</text></svg>`;
 }
 
 function renderFigure(containerId, figureData, fallbackSummary = '') {
@@ -487,6 +531,9 @@ async function callAI(text, image) {
 - 不要使用$...$或\\(...\\)这类公式包裹格式
 - 公式请用常见可读写法，例如 x²、√(a+b)、(x+1)/(x-1)
 - 如果题目有图，figure.svg必须返回完整<svg>...</svg>，保证前端可直接渲染
+- figure.svg必须与题干图形逐项对应（元素、数量、方向、标注名、相对位置）
+- 图形必须精细，禁止泛化示意图、禁止加入题干未出现的对象
+- 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
 - 如果题目无图，figure.type返回none，figure.svg留空
 
 请用JSON格式返回，包含以下字段：
@@ -690,6 +737,9 @@ async function callMutationAI(question) {
 - 不要使用$...$、\\(...\\)、代码块标记等格式符号
 - 公式请写成常见可读形式，例如 x²、√(a+b)、(x+1)/(x-1)
 - 若原题有图，三道变形题都要给出匹配学科特点的SVG图，保证前端可直接显示
+- 每道变形题的figure.svg必须逐项匹配该题题干（元素、数量、方向、标注、相对位置）
+- 图形必须精细，禁止仅画通用占位图，禁止出现与题干无关对象
+- 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
@@ -882,6 +932,9 @@ async function callSynthesisAI(linkedQuestion, slots) {
 - 不要使用$...$、\\(...\\)、代码块标记等格式符号
 - 公式请写成常见可读形式，例如 x²、√(a+b)、(x+1)/(x-1)
 - 若原题有图，必须生成对应学科风格图形SVG
+- figure.svg必须逐项匹配新题题干（元素、数量、方向、标注、相对位置）
+- 图形必须精细，禁止泛化占位图，禁止加入题干无关细节
+- 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
