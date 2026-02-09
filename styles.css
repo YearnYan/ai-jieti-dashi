@@ -609,6 +609,41 @@ body {
     overflow-wrap: anywhere;
 }
 
+.figure-detect-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+}
+
+.figure-detect-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.65rem;
+}
+
+.figure-detect-header h3 {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.figure-type-tag {
+    font-size: 0.72rem;
+    color: var(--gene-cyan);
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    background: rgba(0, 212, 255, 0.12);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+}
+
+.figure-detect-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.85rem;
+}
+
 .gene-sequence {
     display: flex;
     align-items: center;
@@ -885,6 +920,31 @@ body {
     color: var(--text-secondary);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.generated-figure-box {
+    margin-top: 0.75rem;
+    border: 1px dashed rgba(0, 212, 255, 0.25);
+    border-radius: 8px;
+    background: rgba(13, 17, 23, 0.55);
+    min-height: 120px;
+    padding: 0.75rem;
+}
+
+.generated-figure-box.has-figure {
+    border-style: solid;
+}
+
+.generated-figure-box .svg-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.generated-figure-box svg {
+    width: 100%;
+    min-width: 260px;
+    height: auto;
+    display: block;
 }
 
 /* Create Section */

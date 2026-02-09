@@ -134,6 +134,15 @@
                                 <code class="seq-code" id="solutionSeq"></code>
                             </div>
                         </div>
+
+                        <div class="figure-detect-card" id="analyzeFigurePanel">
+                            <div class="figure-detect-header">
+                                <h3>题目图形识别</h3>
+                                <span class="figure-type-tag" id="analyzeFigureType">未检测</span>
+                            </div>
+                            <p class="figure-detect-desc" id="analyzeFigureDesc">当前题目未检测到图形信息。</p>
+                            <div class="generated-figure-box" id="analyzeFigureSvg"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -232,6 +241,7 @@
                         <div class="question-preview" id="questionPreview">
                             <p class="placeholder-text">点击“生成练习题”后，系统将基于你上次解析题目自动生成新题</p>
                         </div>
+                        <div class="generated-figure-box" id="questionFigure"></div>
                         <div class="question-analysis" id="questionAnalysis"></div>
                     </div>
                 </div>
