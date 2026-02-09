@@ -194,6 +194,13 @@ function setFormattedContent(element, value, emptyText = '暂无内容') {
     element.innerHTML = html || `<span class="placeholder-text">${escapeHtml(emptyText)}</span>`;
 }
 
+function buildSvgPromptSnippet(svg, maxLength = 3600) {
+    const safeSvg = cleanDisplayText(svg);
+    if (!safeSvg) return '无';
+    if (safeSvg.length <= maxLength) return safeSvg;
+    return `${safeSvg.slice(0, maxLength)}...(已截断，共${safeSvg.length}字符)`;
+}
+
 function normalizeFigureType(type) {
     const value = cleanDisplayText(type).toLowerCase();
     if (!value) return 'none';
@@ -206,6 +213,14 @@ function normalizeFigureType(type) {
     if (value.includes('geography') || value.includes('地理') || value.includes('地图') || value.includes('地形')) return 'geography';
 
     return 'other';
+}
+
+function normalizeSpatialRelation(value) {
+    return cleanDisplayText(value);
+}
+
+function normalizeFigureElements(value) {
+    return cleanDisplayText(value);
 }
 
 function normalizeSvgContent(svg) {
@@ -266,6 +281,121 @@ function normalizeSvgContent(svg) {
     return safeSvg;
 }
 
+function hasAnyKeyword(text, keywords) {
+    const source = cleanDisplayText(text);
+    if (!source) return false;
+    return keywords.some(keyword => source.includes(keyword));
+}
+
+function isInclineBlockScenario(text) {
+    const hasSlope = hasAnyKeyword(text, ['斜面', '斜坡', '坡面', '斜轨']);
+    const hasBlock = hasAnyKeyword(text, ['滑块', '小滑块', '物块', '木块', '小车']);
+    return hasSlope && hasBlock;
+}
+
+function getNumericSvgAttr(tag, attrName) {
+    if (!tag) return null;
+    const doubleQuoteMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*"([\\d.-]+)"`, 'i'));
+    if (doubleQuoteMatch) return Number(doubleQuoteMatch[1]);
+
+    const singleQuoteMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*'([\\d.-]+)'`, 'i'));
+    if (singleQuoteMatch) return Number(singleQuoteMatch[1]);
+
+    return null;
+}
+
+function replaceSvgNumericAttr(tag, attrName, nextValue) {
+    if (!tag) return tag;
+    const value = Number.isFinite(nextValue) ? String(nextValue) : `${nextValue}`;
+
+    if (new RegExp(`\\b${attrName}\\s*=\\s*"`, 'i').test(tag)) {
+        return tag.replace(new RegExp(`(\\b${attrName}\\s*=\\s*")([^"]*)(")`, 'i'), `$1${value}$3`);
+    }
+
+    if (new RegExp(`\\b${attrName}\\s*=\\s*'`, 'i').test(tag)) {
+        return tag.replace(new RegExp(`(\\b${attrName}\\s*=\\s*')([^']*)(')`, 'i'), `$1${value}$3`);
+    }
+
+    return tag;
+}
+
+function repairInclineBlockPenetration(svgText) {
+    const lineMatches = [...svgText.matchAll(/<line\b[^>]*>/gi)].map(item => item[0]);
+    const slopeLines = lineMatches
+        .map(tag => {
+            const x1 = getNumericSvgAttr(tag, 'x1');
+            const y1 = getNumericSvgAttr(tag, 'y1');
+            const x2 = getNumericSvgAttr(tag, 'x2');
+            const y2 = getNumericSvgAttr(tag, 'y2');
+            if (![x1, y1, x2, y2].every(Number.isFinite)) return null;
+
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const length = Math.hypot(dx, dy);
+            const isSlope = Math.abs(dx) > 24 && Math.abs(dy) > 10;
+
+            if (!isSlope) return null;
+            return { tag, x1, y1, x2, y2, length };
+        })
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length);
+
+    if (!slopeLines.length) return svgText;
+    const slopeLine = slopeLines[0];
+
+    const rectMatches = [...svgText.matchAll(/<rect\b[^>]*>/gi)].map(item => item[0]);
+    const blockCandidates = rectMatches
+        .map(tag => {
+            const x = getNumericSvgAttr(tag, 'x');
+            const y = getNumericSvgAttr(tag, 'y');
+            const width = getNumericSvgAttr(tag, 'width');
+            const height = getNumericSvgAttr(tag, 'height');
+            if (![x, y, width, height].every(Number.isFinite)) return null;
+
+            const area = width * height;
+            const isBlock = width >= 10 && width <= 120 && height >= 8 && height <= 80 && area <= 12000;
+            if (!isBlock) return null;
+
+            return { tag, x, y, width, height, area };
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.area - right.area);
+
+    if (!blockCandidates.length) return svgText;
+    const block = blockCandidates[0];
+
+    const lineDx = slopeLine.x2 - slopeLine.x1;
+    if (Math.abs(lineDx) < 1e-6) return svgText;
+
+    const blockCenterX = block.x + (block.width / 2);
+    const t = (blockCenterX - slopeLine.x1) / lineDx;
+    if (!Number.isFinite(t)) return svgText;
+
+    const lineY = slopeLine.y1 + t * (slopeLine.y2 - slopeLine.y1);
+    const currentBottomY = block.y + block.height;
+    const expectedBottomY = lineY - 2.5;
+
+    if (currentBottomY <= expectedBottomY) return svgText;
+
+    const nextY = Math.max(2, Math.round((expectedBottomY - block.height) * 10) / 10);
+    const nextRectTag = replaceSvgNumericAttr(block.tag, 'y', nextY);
+    return svgText.replace(block.tag, nextRectTag);
+}
+
+function repairFigureSpatialConsistency(svgText, figureData = {}, fallbackSummary = '') {
+    const safeSvg = cleanDisplayText(svgText);
+    if (!safeSvg) return '';
+
+    const figureType = normalizeFigureType(figureData?.type);
+    const contextText = cleanDisplayText(`${fallbackSummary || ''} ${figureData?.description || ''} ${figureData?.spatial || ''} ${figureData?.elements || ''}`);
+
+    if (figureType === 'physics' && isInclineBlockScenario(contextText)) {
+        return repairInclineBlockPenetration(safeSvg);
+    }
+
+    return safeSvg;
+}
+
 function buildFallbackFigureSvg(figureType, summary = '') {
     const safeSummary = escapeHtml(cleanDisplayText(summary || '题目图形'));
     const common = `viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" class="ai-figure" style="color:#ffffff"`;
@@ -306,7 +436,8 @@ function renderFigure(containerId, figureData, fallbackSummary = '') {
         return;
     }
 
-    const finalSvg = svg || buildFallbackFigureSvg(type, fallbackSummary || figureData?.description);
+    const baseSvg = svg || buildFallbackFigureSvg(type, fallbackSummary || figureData?.description);
+    const finalSvg = repairFigureSpatialConsistency(baseSvg, figureData, fallbackSummary || figureData?.description);
     container.innerHTML = `<div class="svg-wrap">${finalSvg}</div>`;
     container.classList.add('has-figure');
 }
@@ -332,7 +463,19 @@ function updateAnalyzeFigurePanel(figureData, summary = '') {
 
     if (descNode) {
         const desc = cleanDisplayText(figureData?.description);
-        descNode.textContent = desc || (type === 'none' ? '当前题目未检测到图形信息。' : `已识别${typeMap[type] || '图形'}，后续环节将保持图形关联。`);
+        const spatial = normalizeSpatialRelation(figureData?.spatial);
+        const elements = normalizeFigureElements(figureData?.elements);
+
+        if (desc) {
+            const segments = [desc];
+            if (spatial) segments.push(`空间关系：${spatial}`);
+            if (elements) segments.push(`关键元素：${elements}`);
+            descNode.textContent = segments.join('；');
+        } else {
+            descNode.textContent = type === 'none'
+                ? '当前题目未检测到图形信息。'
+                : `已识别${typeMap[type] || '图形'}，后续环节将保持图形关联。`;
+        }
     }
 
     renderFigure('analyzeFigureSvg', figureData, summary);
@@ -370,6 +513,8 @@ function normalizeAnalysisResult(result, sourceText) {
         figure: {
             type: normalizeFigureType(safeResult.figure?.type),
             description: cleanDisplayText(safeResult.figure?.description || ''),
+            spatial: normalizeSpatialRelation(safeResult.figure?.spatial || safeResult.figure?.spatialRelation),
+            elements: normalizeFigureElements(safeResult.figure?.elements || safeResult.figure?.elementList),
             svg: normalizeSvgContent(safeResult.figure?.svg)
         }
     };
@@ -534,6 +679,10 @@ async function callAI(text, image) {
 - figure.svg必须与题干图形逐项对应（元素、数量、方向、标注名、相对位置）
 - 图形必须精细，禁止泛化示意图、禁止加入题干未出现的对象
 - 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
+- 必须提取并填写figure.spatial（空间关系）和figure.elements（关键元素清单）
+- figure.spatial至少包含上下/左右/内外/中间/邻接/重合/相交中的适用项
+- figure.elements要列出每个元素名称与位置，例如“A点(左上)、B点(右下)、圆心O(中间)”
+- 严禁“物体嵌入平面/曲线内部”的错误：如滑块在斜面上应与斜面上边界接触，不得陷入斜面内部
 - 如果题目无图，figure.type返回none，figure.svg留空
 
 请用JSON格式返回，包含以下字段：
@@ -555,6 +704,8 @@ async function callAI(text, image) {
     "figure": {
         "type": "none/math/physics/chemistry/biology/geography/other",
         "description": "图形要点说明；无图填空字符串",
+        "spatial": "图形空间关系说明；无图填空字符串",
+        "elements": "图形关键元素清单；无图填空字符串",
         "svg": "完整SVG字符串；无图填空字符串"
     }
 }`
@@ -575,6 +726,16 @@ async function callAI(text, image) {
             userContent.unshift({ type: 'text', text: '请分析图片中的题目：' });
         }
     }
+
+    userContent.push({
+        type: 'text',
+        text: `图形精度强约束：\n1) 若题干有图，figure.svg必须和题干图形100%同构对应，严格保持上下左右、内外、中间、重叠、相交、平行、垂直等关系。\n2) 题干中出现的点/线/角/面/器件/标签/箭头/文字必须逐项对应，不能缺失、不能新增无关对象。\n3) 比例与相对位置要可判读，不能画成泛化示意图。\n4) 请在figure.spatial中明确写出空间关系，在figure.elements中列出元素位置。`
+    });
+
+    userContent.push({
+        type: 'text',
+        text: `物理图形专项约束：\n- 若出现“斜面+滑块/物块/小车”，滑块必须位于斜面上方并与斜面边界接触。\n- 禁止滑块中心或底边落入斜面内部区域。\n- 如有重力/支持力/摩擦力箭头，箭头起点必须在物体接触点或质心附近。`
+    });
 
     messages.push({ role: 'user', content: userContent });
 
@@ -659,6 +820,8 @@ function saveToDatabase(result, sourceText = '') {
         figure: {
             type: normalizeFigureType(result.figure?.type),
             description: cleanDisplayText(result.figure?.description || ''),
+            spatial: normalizeSpatialRelation(result.figure?.spatial || result.figure?.spatialRelation),
+            elements: normalizeFigureElements(result.figure?.elements || result.figure?.elementList),
             svg: normalizeSvgContent(result.figure?.svg)
         },
         sourceText: cleanDisplayText(sourceText),
@@ -740,6 +903,8 @@ async function callMutationAI(question) {
 - 每道变形题的figure.svg必须逐项匹配该题题干（元素、数量、方向、标注、相对位置）
 - 图形必须精细，禁止仅画通用占位图，禁止出现与题干无关对象
 - 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
+- 每道变形题必须返回figure.spatial与figure.elements，且与该题题干完全一致
+- 严禁“物体嵌入平面/曲线内部”的错误：例如滑块在斜面上时，滑块底边应落在斜面边界线上方接触
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
@@ -753,6 +918,8 @@ async function callMutationAI(question) {
             "figure": {
                 "type": "none/math/physics/chemistry/biology/geography/other",
                 "description": "图形说明",
+                "spatial": "空间关系说明",
+                "elements": "关键元素清单",
                 "svg": "完整SVG字符串"
             }
         },
@@ -764,6 +931,8 @@ async function callMutationAI(question) {
             "figure": {
                 "type": "none/math/physics/chemistry/biology/geography/other",
                 "description": "图形说明",
+                "spatial": "空间关系说明",
+                "elements": "关键元素清单",
                 "svg": "完整SVG字符串"
             }
         },
@@ -775,6 +944,8 @@ async function callMutationAI(question) {
             "figure": {
                 "type": "none/math/physics/chemistry/biology/geography/other",
                 "description": "图形说明",
+                "spatial": "空间关系说明",
+                "elements": "关键元素清单",
                 "svg": "完整SVG字符串"
             }
         }
@@ -790,8 +961,16 @@ async function callMutationAI(question) {
 解题思路: ${question.solution.sequence} - ${question.solution.content}
 原题图形类型: ${question.figure?.type || 'none'}
 原题图形说明: ${question.figure?.description || '无'}
-原题图形SVG: ${question.figure?.svg ? '已提供' : '无'}`
+原题图形空间关系: ${question.figure?.spatial || '无'}
+原题图形关键元素: ${question.figure?.elements || '无'}
+原题图形SVG(原文): ${buildSvgPromptSnippet(question.figure?.svg)}
+请严格输出三道题各自的空间关系与元素清单，并确保SVG与题干逐项一致。`
     }];
+
+    messages.push({
+        role: 'user',
+        content: '物理图形专项约束：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
+    });
 
     const response = await fetch(API_CONFIG.url, {
         method: 'POST',
@@ -823,6 +1002,8 @@ async function callMutationAI(question) {
         figure: {
             type: normalizeFigureType(item?.figure?.type || question.figure?.type || 'none'),
             description: cleanDisplayText(item?.figure?.description || ''),
+            spatial: normalizeSpatialRelation(item?.figure?.spatial || item?.figure?.spatialRelation),
+            elements: normalizeFigureElements(item?.figure?.elements || item?.figure?.elementList),
             svg: normalizeSvgContent(item?.figure?.svg)
         }
     }));
@@ -845,6 +1026,8 @@ function displayMutations(result) {
                 ${sourceTip}
                 <p><strong>${escapeHtml(cleanDisplayText(m.description || '暂无说明'))}</strong></p>
                 <p style="margin-top: 0.5rem; color: var(--text-primary);">${formatDisplayHtml(m.example || '暂无变形题')}</p>
+                ${m.figure?.spatial ? `<p class="figure-extra-meta">空间关系：${escapeHtml(m.figure.spatial)}</p>` : ''}
+                ${m.figure?.elements ? `<p class="figure-extra-meta">关键元素：${escapeHtml(m.figure.elements)}</p>` : ''}
                 <div class="generated-figure-box" id="mutationFigure${i + 1}"></div>
             `;
 
@@ -935,6 +1118,8 @@ async function callSynthesisAI(linkedQuestion, slots) {
 - figure.svg必须逐项匹配新题题干（元素、数量、方向、标注、相对位置）
 - 图形必须精细，禁止泛化占位图，禁止加入题干无关细节
 - 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
+- 必须返回figure.spatial与figure.elements，并逐项对应新题题干
+- 严禁“物体嵌入平面/曲线内部”的错误：例如滑块在斜面上时，滑块底边应落在斜面边界线上方接触
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
@@ -944,6 +1129,8 @@ async function callSynthesisAI(linkedQuestion, slots) {
     "figure": {
         "type": "none/math/physics/chemistry/biology/geography/other",
         "description": "图形说明",
+        "spatial": "空间关系说明",
+        "elements": "关键元素清单",
         "svg": "完整SVG字符串"
     }
 }`
@@ -957,8 +1144,16 @@ async function callSynthesisAI(linkedQuestion, slots) {
 解题思路: ${linkedQuestion?.solution?.sequence || slots.solution} - ${linkedQuestion?.solution?.content || '暂无'}
 原题图形类型: ${linkedQuestion?.figure?.type || 'none'}
 原题图形说明: ${linkedQuestion?.figure?.description || '无'}
-原题图形SVG: ${linkedQuestion?.figure?.svg ? '已提供' : '无'}`
+原题图形空间关系: ${linkedQuestion?.figure?.spatial || '无'}
+原题图形关键元素: ${linkedQuestion?.figure?.elements || '无'}
+原题图形SVG(原文): ${buildSvgPromptSnippet(linkedQuestion?.figure?.svg)}
+请严格输出新题对应的空间关系与元素清单，并确保SVG与新题题干100%一致。`
     }];
+
+    messages.push({
+        role: 'user',
+        content: '物理图形专项约束：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
+    });
 
     const response = await fetch(API_CONFIG.url, {
         method: 'POST',
@@ -988,6 +1183,8 @@ async function callSynthesisAI(linkedQuestion, slots) {
         figure: {
             type: normalizeFigureType(parsed.figure?.type || linkedQuestion?.figure?.type || 'none'),
             description: cleanDisplayText(parsed.figure?.description || ''),
+            spatial: normalizeSpatialRelation(parsed.figure?.spatial || parsed.figure?.spatialRelation),
+            elements: normalizeFigureElements(parsed.figure?.elements || parsed.figure?.elementList),
             svg: normalizeSvgContent(parsed.figure?.svg)
         }
     };
@@ -1005,6 +1202,15 @@ function displaySynthesizedQuestion(result) {
             : '';
 
         preview.innerHTML = `${sourceTip}${formatDisplayHtml(result.question || '生成失败')}`;
+    }
+
+    if (preview && result.figure) {
+        if (result.figure.spatial) {
+            preview.innerHTML += `<p class="figure-extra-meta">空间关系：${escapeHtml(result.figure.spatial)}</p>`;
+        }
+        if (result.figure.elements) {
+            preview.innerHTML += `<p class="figure-extra-meta">关键元素：${escapeHtml(result.figure.elements)}</p>`;
+        }
     }
 
     renderFigure('questionFigure', result.figure, result.question);
