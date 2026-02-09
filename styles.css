@@ -922,15 +922,6 @@ body {
     overflow-wrap: anywhere;
 }
 
-.figure-extra-meta {
-    margin-top: 0.45rem;
-    font-size: 0.8rem;
-    line-height: 1.6;
-    color: var(--text-secondary);
-    border-left: 2px solid rgba(0, 212, 255, 0.35);
-    padding-left: 0.55rem;
-}
-
 .generated-figure-box {
     margin-top: 0.75rem;
     border: 1px dashed rgba(0, 212, 255, 0.25);

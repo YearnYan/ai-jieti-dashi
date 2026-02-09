@@ -61,6 +61,7 @@ function initNavigation() {
 // File Upload
 let uploadedImage = null;
 let uploadedFileName = '';
+let lastAnalyzedText = '';
 
 // 当前用于跨模块联动的原题ID
 let linkedQuestionId = null;
@@ -100,6 +101,11 @@ function handleFile(file) {
 
     uploadedFileName = file.name || '';
 
+    const currentInputText = cleanDisplayText(elements.questionInput?.value || '');
+    if (currentInputText && currentInputText === lastAnalyzedText) {
+        elements.questionInput.value = '';
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
         uploadedImage = e.target.result;
@@ -117,6 +123,26 @@ function showImagePreview(src) {
     img.src = src;
     img.className = 'image-preview';
     elements.uploadArea.appendChild(img);
+}
+
+function clearImagePreview() {
+    const existingPreview = document.querySelector('.image-preview');
+    if (existingPreview) existingPreview.remove();
+}
+
+function resetQuestionInputState() {
+    uploadedImage = null;
+    uploadedFileName = '';
+
+    if (elements.fileInput) {
+        elements.fileInput.value = '';
+    }
+
+    if (elements.questionInput) {
+        elements.questionInput.value = '';
+    }
+
+    clearImagePreview();
 }
 
 function bootstrapDataView() {
@@ -199,6 +225,17 @@ function buildSvgPromptSnippet(svg, maxLength = 3600) {
     if (!safeSvg) return '无';
     if (safeSvg.length <= maxLength) return safeSvg;
     return `${safeSvg.slice(0, maxLength)}...(已截断，共${safeSvg.length}字符)`;
+}
+
+function getUniversalFigureRulesText() {
+    return [
+        '全学科图形专项约束（数学/物理/化学/生物/地理全部适用）：',
+        '1) 严格保持上下、左右、内外、中间、邻接、相交、重合、接触、包含、平行、垂直关系。',
+        '2) elements里的每个元素都必须在SVG中一一对应，位置关系一致，禁止漏画、错位、越界。',
+        '3) 若题干写明“在…上/下/内/外/中间/左侧/右侧”，SVG必须可直接看出同样关系。',
+        '4) 数学图要保证点线角面的相对位置；化学图要保证键连与原子排布；生物图要保证结构内外层级；地理图要保证地形与图例定位。',
+        '5) 输出前必须自检：关系一致、元素齐全、比例合理，不通过就重画。'
+    ].join('\n');
 }
 
 function normalizeFigureType(type) {
@@ -463,19 +500,9 @@ function updateAnalyzeFigurePanel(figureData, summary = '') {
 
     if (descNode) {
         const desc = cleanDisplayText(figureData?.description);
-        const spatial = normalizeSpatialRelation(figureData?.spatial);
-        const elements = normalizeFigureElements(figureData?.elements);
-
-        if (desc) {
-            const segments = [desc];
-            if (spatial) segments.push(`空间关系：${spatial}`);
-            if (elements) segments.push(`关键元素：${elements}`);
-            descNode.textContent = segments.join('；');
-        } else {
-            descNode.textContent = type === 'none'
-                ? '当前题目未检测到图形信息。'
-                : `已识别${typeMap[type] || '图形'}，后续环节将保持图形关联。`;
-        }
+        descNode.textContent = desc || (type === 'none'
+            ? '当前题目未检测到图形信息。'
+            : `已识别${typeMap[type] || '图形'}，后续环节将保持图形关联。`);
     }
 
     renderFigure('analyzeFigureSvg', figureData, summary);
@@ -553,12 +580,19 @@ function getOrderedQuestions() {
     return [...geneDatabase.questions].sort((a, b) => {
         const bTime = new Date(b.parsedAt || 0).getTime() || Number(b.id) || 0;
         const aTime = new Date(a.parsedAt || 0).getTime() || Number(a.id) || 0;
+        if (bTime === aTime) {
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
+        }
         return bTime - aTime;
     });
 }
 
 function getLinkedQuestion() {
     if (!geneDatabase.questions.length) return null;
+    if (linkedQuestionId !== null) {
+        const linkedQuestion = getQuestionById(linkedQuestionId);
+        if (linkedQuestion) return linkedQuestion;
+    }
     return getOrderedQuestions()[0];
 }
 
@@ -648,9 +682,8 @@ async function analyzeQuestion() {
         const savedQuestion = saveToDatabase(result, sourceText);
         setLinkedQuestion(savedQuestion.id);
         resetDownstreamPanels();
-
-        uploadedImage = null;
-        uploadedFileName = '';
+        lastAnalyzedText = cleanDisplayText(textInput);
+        resetQuestionInputState();
     } catch (error) {
         console.error('Analysis error:', error);
         showToast('题目解析失败，请检查网络后重试');
@@ -682,7 +715,7 @@ async function callAI(text, image) {
 - 必须提取并填写figure.spatial（空间关系）和figure.elements（关键元素清单）
 - figure.spatial至少包含上下/左右/内外/中间/邻接/重合/相交中的适用项
 - figure.elements要列出每个元素名称与位置，例如“A点(左上)、B点(右下)、圆心O(中间)”
-- 严禁“物体嵌入平面/曲线内部”的错误：如滑块在斜面上应与斜面上边界接触，不得陷入斜面内部
+- 严禁空间关系错误：例如滑块陷入斜面、点被画到圆外、细胞器越出细胞膜、地理图例与目标区域错位
 - 如果题目无图，figure.type返回none，figure.svg留空
 
 请用JSON格式返回，包含以下字段：
@@ -729,12 +762,12 @@ async function callAI(text, image) {
 
     userContent.push({
         type: 'text',
-        text: `图形精度强约束：\n1) 若题干有图，figure.svg必须和题干图形100%同构对应，严格保持上下左右、内外、中间、重叠、相交、平行、垂直等关系。\n2) 题干中出现的点/线/角/面/器件/标签/箭头/文字必须逐项对应，不能缺失、不能新增无关对象。\n3) 比例与相对位置要可判读，不能画成泛化示意图。\n4) 请在figure.spatial中明确写出空间关系，在figure.elements中列出元素位置。`
+        text: getUniversalFigureRulesText()
     });
 
     userContent.push({
         type: 'text',
-        text: `物理图形专项约束：\n- 若出现“斜面+滑块/物块/小车”，滑块必须位于斜面上方并与斜面边界接触。\n- 禁止滑块中心或底边落入斜面内部区域。\n- 如有重力/支持力/摩擦力箭头，箭头起点必须在物体接触点或质心附近。`
+        text: '物理补充：若出现斜面+滑块/物块/小车，滑块必须在斜面边界上方接触，绝不能陷入斜面内部。'
     });
 
     messages.push({ role: 'user', content: userContent });
@@ -904,7 +937,7 @@ async function callMutationAI(question) {
 - 图形必须精细，禁止仅画通用占位图，禁止出现与题干无关对象
 - 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
 - 每道变形题必须返回figure.spatial与figure.elements，且与该题题干完全一致
-- 严禁“物体嵌入平面/曲线内部”的错误：例如滑块在斜面上时，滑块底边应落在斜面边界线上方接触
+- 严禁空间关系错误：例如滑块陷入斜面、点被画到圆外、细胞器越出细胞膜、地理图例与目标区域错位
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
@@ -969,7 +1002,12 @@ async function callMutationAI(question) {
 
     messages.push({
         role: 'user',
-        content: '物理图形专项约束：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
+        content: getUniversalFigureRulesText()
+    });
+
+    messages.push({
+        role: 'user',
+        content: '物理补充：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
     });
 
     const response = await fetch(API_CONFIG.url, {
@@ -1026,8 +1064,6 @@ function displayMutations(result) {
                 ${sourceTip}
                 <p><strong>${escapeHtml(cleanDisplayText(m.description || '暂无说明'))}</strong></p>
                 <p style="margin-top: 0.5rem; color: var(--text-primary);">${formatDisplayHtml(m.example || '暂无变形题')}</p>
-                ${m.figure?.spatial ? `<p class="figure-extra-meta">空间关系：${escapeHtml(m.figure.spatial)}</p>` : ''}
-                ${m.figure?.elements ? `<p class="figure-extra-meta">关键元素：${escapeHtml(m.figure.elements)}</p>` : ''}
                 <div class="generated-figure-box" id="mutationFigure${i + 1}"></div>
             `;
 
@@ -1119,7 +1155,7 @@ async function callSynthesisAI(linkedQuestion, slots) {
 - 图形必须精细，禁止泛化占位图，禁止加入题干无关细节
 - 图形线条和文字统一使用白色，禁止黑色；默认建议viewBox 320x180
 - 必须返回figure.spatial与figure.elements，并逐项对应新题题干
-- 严禁“物体嵌入平面/曲线内部”的错误：例如滑块在斜面上时，滑块底边应落在斜面边界线上方接触
+- 严禁空间关系错误：例如滑块陷入斜面、点被画到圆外、细胞器越出细胞膜、地理图例与目标区域错位
 - 若原题无图，figure.type返回none且figure.svg留空
 
 请用JSON格式返回：
@@ -1152,7 +1188,12 @@ async function callSynthesisAI(linkedQuestion, slots) {
 
     messages.push({
         role: 'user',
-        content: '物理图形专项约束：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
+        content: getUniversalFigureRulesText()
+    });
+
+    messages.push({
+        role: 'user',
+        content: '物理补充：斜面-滑块场景中，滑块只能在斜面上边界接触，不得陷入斜面内部。'
     });
 
     const response = await fetch(API_CONFIG.url, {
@@ -1202,15 +1243,6 @@ function displaySynthesizedQuestion(result) {
             : '';
 
         preview.innerHTML = `${sourceTip}${formatDisplayHtml(result.question || '生成失败')}`;
-    }
-
-    if (preview && result.figure) {
-        if (result.figure.spatial) {
-            preview.innerHTML += `<p class="figure-extra-meta">空间关系：${escapeHtml(result.figure.spatial)}</p>`;
-        }
-        if (result.figure.elements) {
-            preview.innerHTML += `<p class="figure-extra-meta">关键元素：${escapeHtml(result.figure.elements)}</p>`;
-        }
     }
 
     renderFigure('questionFigure', result.figure, result.question);
