@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI解题大师 | 智能题目结构解析平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- DNA Helix Background -->
+    <div class="dna-bg">
+        <svg class="dna-helix" viewBox="0 0 200 800" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="helixGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.8" />
+                    <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0.3" />
+                </linearGradient>
+                <linearGradient id="helixGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ff00aa;stop-opacity:0.6" />
+                    <stop offset="100%" style="stop-color:#00ff88;stop-opacity:0.2" />
+                </linearGradient>
+            </defs>
+        </svg>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 40 40">
+                    <circle cx="20" cy="10" r="4" fill="#00ff88"/>
+                    <circle cx="20" cy="30" r="4" fill="#00d4ff"/>
+                    <path d="M20 14 Q30 20 20 26" stroke="#00ff88" stroke-width="2" fill="none"/>
+                    <path d="M20 14 Q10 20 20 26" stroke="#00d4ff" stroke-width="2" fill="none"/>
+                </svg>
+            </div>
+            <span class="logo-text">AI解题大师</span>
+        </div>
+        <nav class="nav">
+            <a href="#analyze" class="nav-link active" data-section="analyze">题目解析</a>
+            <a href="#mutate" class="nav-link" data-section="mutate">变形预测</a>
+            <a href="#create" class="nav-link" data-section="create">举一反三</a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Section 1: Gene Analysis -->
+        <section id="analyze" class="section active">
+            <div class="section-header">
+                <h1 class="glitch-text" data-text="题目解析">题目解析</h1>
+                <p class="section-desc">上传任意题目，AI深度拆解题目结构，看透出题套路</p>
+            </div>
+
+            <div class="analyzer-container">
+                <div class="input-zone">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">
+                            <svg viewBox="0 0 64 64">
+                                <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="4 4"/>
+                                <path d="M32 20v24M20 32h24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <p class="upload-text">拖拽或点击上传题目截图</p>
+                        <p class="upload-hint">支持数学、物理、化学等各科题目</p>
+                        <input type="file" id="fileInput" accept="image/*,.pdf" hidden>
+                    </div>
+
+                    <div class="divider">
+                        <span>或</span>
+                    </div>
+
+                    <div class="text-input-area">
+                        <textarea id="questionInput" placeholder="直接粘贴题目内容，例如：已知函数f(x)=x²+2x+1，求f(x)的最小值..."></textarea>
+                    </div>
+
+                    <button class="analyze-btn" id="analyzeBtn">
+                        <span class="btn-text">开始解析题目</span>
+                        <span class="btn-icon">
+                            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14v-4H7l5-5 5 5h-4v4h-2z" fill="currentColor"/></svg>
+                        </span>
+                        <div class="btn-glow"></div>
+                    </button>
+                </div>
+
+                <div class="result-zone" id="resultZone">
+                    <div class="dna-loader" id="dnaLoader">
+                        <div class="helix">
+                            <div class="strand strand-1"></div>
+                            <div class="strand strand-2"></div>
+                        </div>
+                        <p class="loader-text">正在深度解析题目结构...</p>
+                    </div>
+
+                    <div class="gene-result" id="geneResult">
+                        <div class="gene-card condition-gene">
+                            <div class="gene-header">
+                                <div class="gene-icon">条</div>
+                                <h3>已知条件拆解</h3>
+                                <span class="gene-tag">题目给了什么</span>
+                            </div>
+                            <div class="gene-content" id="conditionContent"></div>
+                            <div class="gene-sequence">
+                                <span class="seq-label">题型编码:</span>
+                                <code class="seq-code" id="conditionSeq"></code>
+                            </div>
+                        </div>
+
+                        <div class="gene-card pattern-gene">
+                            <div class="gene-header">
+                                <div class="gene-icon">问</div>
+                                <h3>问题类型识别</h3>
+                                <span class="gene-tag">题目问什么</span>
+                            </div>
+                            <div class="gene-content" id="patternContent"></div>
+                            <div class="gene-sequence">
+                                <span class="seq-label">题型编码:</span>
+                                <code class="seq-code" id="patternSeq"></code>
+                            </div>
+                        </div>
+
+                        <div class="gene-card solution-gene">
+                            <div class="gene-header">
+                                <div class="gene-icon">解</div>
+                                <h3>解题思路分析</h3>
+                                <span class="gene-tag">应该怎么做</span>
+                            </div>
+                            <div class="gene-content" id="solutionContent"></div>
+                            <div class="gene-sequence">
+                                <span class="seq-label">题型编码:</span>
+                                <code class="seq-code" id="solutionSeq"></code>
+                            </div>
+                        </div>
+
+                        <div class="figure-detect-card" id="analyzeFigurePanel">
+                            <div class="figure-detect-header">
+                                <h3>题目图形识别</h3>
+                                <span class="figure-type-tag" id="analyzeFigureType">未检测</span>
+                            </div>
+                            <p class="figure-detect-desc" id="analyzeFigureDesc">当前题目未检测到图形信息。</p>
+                            <div class="generated-figure-box" id="analyzeFigureSvg"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Mutation Prediction -->
+        <section id="mutate" class="section">
+            <div class="section-header">
+                <h1 class="glitch-text" data-text="变形预测">变形预测</h1>
+                <p class="section-desc">预测考试可能出现的变形题，提前练习不怕考场遇新题</p>
+                <p class="section-relation-hint" id="mutationRelationHint">请先在“题目解析”中上传并解析题目，后续模块会自动关联。</p>
+            </div>
+
+            <div class="mutate-container">
+                <div class="mutation-input">
+                    <h3>基于上次解析题目生成</h3>
+                    <p class="source-brief" id="mutationSourcePreview">请先在“题目解析”中上传并解析题目。</p>
+                    <button class="mutate-btn" id="mutateBtn">
+                        <span>生成变形题</span>
+                        <div class="mutation-effect"></div>
+                    </button>
+                </div>
+
+                <div class="mutation-result" id="mutationResult">
+                    <!-- Loading State -->
+                    <div class="result-loader" id="mutationLoader">
+                        <div class="spinner"></div>
+                        <p class="loader-text">正在生成变形题，请稍候...</p>
+                    </div>
+
+                    <!-- Results -->
+                    <div class="mutation-cards" id="mutationCards">
+                        <div class="mutation-card">
+                            <div class="mutation-header">
+                                <span class="mutation-type">简单变形</span>
+                                <span class="mutation-prob">考试出现率: 85%</span>
+                            </div>
+                            <div class="mutation-content" id="mutation1">
+                                <p class="placeholder-text">点击"生成变形题"按钮，AI将为您预测可能的变形题</p>
+                            </div>
+                        </div>
+                        <div class="mutation-card">
+                            <div class="mutation-header">
+                                <span class="mutation-type">中等变形</span>
+                                <span class="mutation-prob">考试出现率: 60%</span>
+                            </div>
+                            <div class="mutation-content" id="mutation2">
+                                <p class="placeholder-text">变形题将显示在这里</p>
+                            </div>
+                        </div>
+                        <div class="mutation-card">
+                            <div class="mutation-header">
+                                <span class="mutation-type">综合变形</span>
+                                <span class="mutation-prob">考试出现率: 25%</span>
+                            </div>
+                            <div class="mutation-content" id="mutation3">
+                                <p class="placeholder-text">变形题将显示在这里</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Gene Assembly -->
+        <section id="create" class="section">
+            <div class="section-header">
+                <h1 class="glitch-text" data-text="举一反三">举一反三</h1>
+                <p class="section-desc">基于上次解析题目自动生成同主线新题，强化迁移能力</p>
+                <p class="section-relation-hint" id="createRelationHint">请先在“题目解析”中上传并解析题目，后续模块会自动关联。</p>
+            </div>
+
+            <div class="create-container">
+                <div class="assembly-lab">
+                    <div class="assembly-zone">
+                        <h3>基于上次解析题目自动生成</h3>
+                        <p class="source-brief" id="createSourcePreview">请先在“题目解析”中上传并解析题目。</p>
+                        <button class="create-btn" id="createBtn">
+                            <span>生成练习题</span>
+                            <div class="synthesis-effect"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="created-question" id="createdQuestion">
+                    <h3>生成的练习题</h3>
+
+                    <!-- Loading State -->
+                    <div class="result-loader" id="createLoader">
+                        <div class="spinner"></div>
+                        <p class="loader-text">正在生成练习题，请稍候...</p>
+                    </div>
+
+                    <!-- Results -->
+                    <div class="create-results" id="createResults">
+                        <div class="question-preview" id="questionPreview">
+                            <p class="placeholder-text">点击“生成练习题”后，系统将基于你上次解析题目自动生成新题</p>
+                        </div>
+                        <div class="generated-figure-box" id="questionFigure"></div>
+                        <div class="question-analysis" id="questionAnalysis"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
