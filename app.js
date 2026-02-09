@@ -62,6 +62,7 @@ function initNavigation() {
 let uploadedImage = null;
 let uploadedFileName = '';
 let lastAnalyzedText = '';
+let isReadingUploadImage = false;
 
 // 当前用于跨模块联动的原题ID
 let linkedQuestionId = null;
@@ -99,6 +100,12 @@ function handleFile(file) {
         return;
     }
 
+    isReadingUploadImage = true;
+    uploadedImage = null;
+    if (elements.analyzeBtn) {
+        elements.analyzeBtn.disabled = true;
+    }
+
     uploadedFileName = file.name || '';
 
     const currentInputText = cleanDisplayText(elements.questionInput?.value || '');
@@ -109,8 +116,20 @@ function handleFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         uploadedImage = e.target.result;
+        isReadingUploadImage = false;
+        if (elements.analyzeBtn) {
+            elements.analyzeBtn.disabled = false;
+        }
         showImagePreview(uploadedImage);
         showToast('题目图片已上传，点击开始解析题目');
+    };
+    reader.onerror = () => {
+        isReadingUploadImage = false;
+        uploadedImage = null;
+        if (elements.analyzeBtn) {
+            elements.analyzeBtn.disabled = false;
+        }
+        showToast('图片读取失败，请重新上传');
     };
     reader.readAsDataURL(file);
 }
@@ -133,6 +152,7 @@ function clearImagePreview() {
 function resetQuestionInputState() {
     uploadedImage = null;
     uploadedFileName = '';
+    isReadingUploadImage = false;
 
     if (elements.fileInput) {
         elements.fileInput.value = '';
@@ -915,6 +935,11 @@ function initAnalyzer() {
 
 async function analyzeQuestion() {
     const textInput = elements.questionInput.value.trim();
+
+    if (isReadingUploadImage) {
+        showToast('图片正在读取，请稍后再解析');
+        return;
+    }
 
     if (!textInput && !uploadedImage) {
         showToast('请输入题目文本或上传题目图片');
